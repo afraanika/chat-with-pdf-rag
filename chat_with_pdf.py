@@ -5,6 +5,7 @@ Stage 1: PDF loading & text extraction (with cleanup)
 Stage 2: Chunking
 Stage 3: Embeddings
 Stage 4: Vector storage & retrieval
+Stage 5: Prompt construction
 """
 
 import re
@@ -214,6 +215,34 @@ def retrieve(
     return [(chunks[i], float(sim)) for sim, i in zip(similarities[0], indices[0])]
 
 
+def build_prompt(query: str, results: list[tuple[Chunk, float]]) -> str:
+    """
+    Assemble retrieved chunks and the question into one prompt string for
+    the LLM. Two instructions matter most here for controlling
+    hallucination: telling the model to rely ONLY on the provided context,
+    and explicitly permitting it to say "I don't know" instead of
+    guessing. Stage 4 showed that retrieval always returns *something*,
+    even for an unrelated question - so the model needs explicit
+    permission to reject an unhelpful context rather than force an answer
+    out of it.
+    """
+    context_blocks = []
+    for i, (chunk, _score) in enumerate(results, start=1):
+        pages = ", ".join(str(p) for p in chunk.pages)
+        context_blocks.append(f"[{i}] (page {pages})\n{chunk.text}")
+    context = "\n\n".join(context_blocks)
+
+    return (
+        "You are a helpful assistant that answers questions using ONLY the "
+        "context provided below. If the context does not contain the "
+        "answer, say \"I don't have enough information in the document to "
+        "answer that\" instead of guessing.\n\n"
+        f"Context:\n{context}\n\n"
+        f"Question: {query}\n\n"
+        "Answer:"
+    )
+
+
 if __name__ == "__main__":
     raw_pages = extract_page_content(PDF_PATH)
     cleaned_pages = remove_repeated_lines(raw_pages)
@@ -251,3 +280,8 @@ if __name__ == "__main__":
         print(f"--- Rank {rank} (score {score:.3f}, page(s) {chunk.pages}) ---")
         print(chunk.text)
         print()
+
+    prompt = build_prompt(query, results)
+    print("Stage 5: constructed prompt (this is the literal text the LLM will see)\n")
+    print(prompt)
+    print()
