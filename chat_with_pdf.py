@@ -3,6 +3,7 @@ Chat with a PDF — RAG from scratch, built stage by stage.
 
 Stage 1: PDF loading & text extraction (with cleanup)
 Stage 2: Chunking
+Stage 3: Embeddings
 """
 
 import re
@@ -10,7 +11,9 @@ from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
+import numpy as np
 import pdfplumber
+from sentence_transformers import SentenceTransformer
 
 PDF_PATH = Path("data/sample.pdf")
 
@@ -18,6 +21,11 @@ PDF_PATH = Path("data/sample.pdf")
 # proxy (about 4 characters per token in English), not an exact budget.
 CHUNK_SIZE = 500
 CHUNK_OVERLAP = 100
+
+# Small (~80MB), fast on CPU, 384-dimensional vectors. Larger models like
+# all-mpnet-base-v2 (768-dim) capture meaning more precisely but cost more
+# to run - MiniLM trades some quality for fast local iteration.
+EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 
 
 def extract_page_content(pdf_path: Path) -> list[str]:
@@ -154,6 +162,20 @@ def chunk_text(
     return chunks
 
 
+def embed_chunks(
+    chunks: list[Chunk], model_name: str = EMBEDDING_MODEL
+) -> np.ndarray:
+    """
+    Turn each chunk's text into a fixed-length vector using a local
+    sentence-transformers model. Vectors are L2-normalized so that a plain
+    dot product between two vectors equals their cosine similarity - this
+    keeps the similarity math in Stage 4 simple.
+    """
+    model = SentenceTransformer(model_name)
+    texts = [chunk.text for chunk in chunks]
+    return model.encode(texts, normalize_embeddings=True)
+
+
 if __name__ == "__main__":
     raw_pages = extract_page_content(PDF_PATH)
     cleaned_pages = remove_repeated_lines(raw_pages)
@@ -167,10 +189,14 @@ if __name__ == "__main__":
         f"(chunk_size={CHUNK_SIZE}, overlap={CHUNK_OVERLAP})\n"
     )
 
-    for i, chunk in enumerate(chunks):
-        print(
-            f"--- Chunk {i + 1} (chars {chunk.start}-{chunk.end}, "
-            f"{len(chunk.text)} chars, page(s) {chunk.pages}) ---"
-        )
-        print(chunk.text)
-        print()
+    embeddings = embed_chunks(chunks)
+    print(f"Stage 3: embedded {embeddings.shape[0]} chunks into {embeddings.shape[1]}-dim vectors\n")
+    print(f"First 8 numbers of chunk 1's vector: {embeddings[0][:8]}\n")
+
+    # A concrete look at "distance = similarity": vectors are normalized,
+    # so a dot product between two of them IS their cosine similarity.
+    print("Similarity demo (cosine similarity, 1.0 = identical direction):")
+    pairs_to_compare = [(0, 1), (0, 4), (0, 7)]
+    for i, j in pairs_to_compare:
+        similarity = float(np.dot(embeddings[i], embeddings[j]))
+        print(f"  chunk {i + 1} vs chunk {j + 1}: {similarity:.3f}")
