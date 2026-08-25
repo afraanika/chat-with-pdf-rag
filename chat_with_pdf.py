@@ -6,8 +6,11 @@ Stage 2: Chunking
 Stage 3: Embeddings
 Stage 4: Vector storage & retrieval
 Stage 5: Prompt construction
+Stage 6: Generation & answering
+Stage 7 (optional/stretch): Basic evaluation
 """
 
+import os
 import re
 from collections import Counter
 from dataclasses import dataclass
@@ -15,10 +18,17 @@ from pathlib import Path
 
 import faiss
 import numpy as np
+import ollama
 import pdfplumber
+from dotenv import load_dotenv
 from sentence_transformers import SentenceTransformer
 
+load_dotenv()
+
 PDF_PATH = Path("data/sample.pdf")
+
+OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3")
 
 # Chunk size and overlap are measured in characters, not tokens - a rough
 # proxy (about 4 characters per token in English), not an exact budget.
@@ -243,6 +253,77 @@ def build_prompt(query: str, results: list[tuple[Chunk, float]]) -> str:
     )
 
 
+def generate_answer(prompt: str, model: str = OLLAMA_MODEL, host: str = OLLAMA_HOST) -> str:
+    """
+    Send the constructed prompt to a local Ollama model and return its text
+    response. This is the only place in the whole pipeline that actually
+    produces new, human-readable text - every earlier stage only found and
+    rearranged existing text from the document.
+    """
+    client = ollama.Client(host=host)
+    response = client.generate(model=model, prompt=prompt)
+    return response["response"]
+
+
+def format_sources(results: list[tuple[Chunk, float]]) -> str:
+    """
+    Render the chunks that were actually placed in the prompt as a
+    human-readable sources list, using the same [n] numbering the model
+    saw in the prompt. This lets the answer's grounding be checked against
+    the real source text instead of taken on faith.
+    """
+    lines = []
+    for i, (chunk, score) in enumerate(results, start=1):
+        pages = ", ".join(str(p) for p in chunk.pages)
+        preview = " ".join(chunk.text.split())
+        if len(preview) > 120:
+            preview = preview[:120] + "..."
+        lines.append(f"[{i}] page(s) {pages} (score {score:.3f}): {preview}")
+    return "\n".join(lines)
+
+
+# Each (question, expected_page) pair is a fact we already know the page
+# number for, by having read the document ourselves. This tests retrieval
+# (Stage 4) in isolation, not the final generated answer.
+EVAL_QUESTIONS: list[tuple[str, int]] = [
+    ("Where should I place the ap_bookmark.bmk file?", 4),
+    ("Where should I place the ap_bookmark.mdf file?", 4),
+    ("What files are included in this sample package?", 3),
+    ("What command identifies which bookmark file to use?", 3),
+    ("How do I sort invoices by transaction amount?", 2),
+    ("What software was used to create and test this sample?", 1),
+    ("How many separate pages does the sample normally produce by default?", 1),
+]
+
+
+def evaluate_retrieval(
+    questions: list[tuple[str, int]],
+    chunks: list[Chunk],
+    index: faiss.Index,
+    model: SentenceTransformer,
+    top_k: int = 3,
+) -> None:
+    """
+    For each (question, expected_page) pair, check whether the expected
+    page shows up anywhere among the top_k retrieved chunks' pages. A
+    "pass" doesn't mean the exact right sentence was retrieved - only that
+    the right page was in the mix. That's a deliberately loose bar, and a
+    real limitation of this evaluation - see the tradeoff writeup.
+    """
+    passed = 0
+    for question, expected_page in questions:
+        results = retrieve(question, chunks, index, model, top_k=top_k)
+        retrieved_pages = {p for chunk, _ in results for p in chunk.pages}
+        ok = expected_page in retrieved_pages
+        passed += ok
+        status = "PASS" if ok else "FAIL"
+        print(
+            f"[{status}] expected page {expected_page}, "
+            f"got pages {sorted(retrieved_pages)} - {question!r}"
+        )
+    print(f"\n{passed}/{len(questions)} passed")
+
+
 if __name__ == "__main__":
     raw_pages = extract_page_content(PDF_PATH)
     cleaned_pages = remove_repeated_lines(raw_pages)
@@ -285,3 +366,15 @@ if __name__ == "__main__":
     print("Stage 5: constructed prompt (this is the literal text the LLM will see)\n")
     print(prompt)
     print()
+
+    print(f"Stage 6: asking {OLLAMA_MODEL} via Ollama...\n")
+    answer = generate_answer(prompt)
+    print("Answer:")
+    print(answer)
+    print()
+    print("Sources used:")
+    print(format_sources(results))
+    print()
+
+    print(f"Stage 7: evaluating retrieval on {len(EVAL_QUESTIONS)} test questions\n")
+    evaluate_retrieval(EVAL_QUESTIONS, chunks, index, embedding_model)
