@@ -4,6 +4,7 @@ Chat with a PDF — RAG from scratch, built stage by stage.
 Stage 1: PDF loading & text extraction (with cleanup)
 Stage 2: Chunking
 Stage 3: Embeddings
+Stage 4: Vector storage & retrieval
 """
 
 import re
@@ -11,6 +12,7 @@ from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
+import faiss
 import numpy as np
 import pdfplumber
 from sentence_transformers import SentenceTransformer
@@ -162,18 +164,54 @@ def chunk_text(
     return chunks
 
 
-def embed_chunks(
-    chunks: list[Chunk], model_name: str = EMBEDDING_MODEL
-) -> np.ndarray:
+def load_embedding_model(model_name: str = EMBEDDING_MODEL) -> SentenceTransformer:
+    return SentenceTransformer(model_name)
+
+
+def embed_texts(model: SentenceTransformer, texts: list[str]) -> np.ndarray:
     """
-    Turn each chunk's text into a fixed-length vector using a local
-    sentence-transformers model. Vectors are L2-normalized so that a plain
-    dot product between two vectors equals their cosine similarity - this
-    keeps the similarity math in Stage 4 simple.
+    Turn a list of texts into fixed-length vectors. Vectors are
+    L2-normalized so that a plain dot product between two vectors equals
+    their cosine similarity - this keeps the similarity math simple
+    everywhere it's used, including the index search in Stage 4.
     """
-    model = SentenceTransformer(model_name)
-    texts = [chunk.text for chunk in chunks]
     return model.encode(texts, normalize_embeddings=True)
+
+
+def build_index(embeddings: np.ndarray) -> faiss.Index:
+    """
+    Build a FAISS flat (exact) index over the given embeddings, using inner
+    product as the similarity metric. Because our embeddings are already
+    L2-normalized, inner product IS cosine similarity here.
+
+    "Flat" means every search still checks every stored vector - no
+    approximation. At 8 chunks that is the right call: an approximate index
+    (IVF, HNSW, ...) exists to skip most of a much larger haystack, and
+    would be pure overhead here. It only pays off once a linear scan is
+    actually slow - realistically hundreds of thousands of vectors or more.
+    """
+    dimension = embeddings.shape[1]
+    index = faiss.IndexFlatIP(dimension)
+    index.add(embeddings)
+    return index
+
+
+def retrieve(
+    query: str,
+    chunks: list[Chunk],
+    index: faiss.Index,
+    model: SentenceTransformer,
+    top_k: int = 3,
+) -> list[tuple[Chunk, float]]:
+    """
+    Embed the query with the SAME model used for the chunks - comparing
+    vectors from two different models would run without error but be
+    meaningless, since they wouldn't share a coordinate system - then ask
+    the index for the top_k closest chunk vectors.
+    """
+    query_vector = embed_texts(model, [query])
+    similarities, indices = index.search(query_vector, top_k)
+    return [(chunks[i], float(sim)) for sim, i in zip(similarities[0], indices[0])]
 
 
 if __name__ == "__main__":
@@ -189,7 +227,8 @@ if __name__ == "__main__":
         f"(chunk_size={CHUNK_SIZE}, overlap={CHUNK_OVERLAP})\n"
     )
 
-    embeddings = embed_chunks(chunks)
+    embedding_model = load_embedding_model()
+    embeddings = embed_texts(embedding_model, [chunk.text for chunk in chunks])
     print(f"Stage 3: embedded {embeddings.shape[0]} chunks into {embeddings.shape[1]}-dim vectors\n")
     print(f"First 8 numbers of chunk 1's vector: {embeddings[0][:8]}\n")
 
@@ -200,3 +239,15 @@ if __name__ == "__main__":
     for i, j in pairs_to_compare:
         similarity = float(np.dot(embeddings[i], embeddings[j]))
         print(f"  chunk {i + 1} vs chunk {j + 1}: {similarity:.3f}")
+    print()
+
+    index = build_index(embeddings)
+    print(f"Stage 4: built a FAISS flat index over {index.ntotal} vectors\n")
+
+    query = "Where should I place the ap_bookmark.bmk file?"
+    print(f"Query: {query!r}\n")
+    results = retrieve(query, chunks, index, embedding_model, top_k=3)
+    for rank, (chunk, score) in enumerate(results, start=1):
+        print(f"--- Rank {rank} (score {score:.3f}, page(s) {chunk.pages}) ---")
+        print(chunk.text)
+        print()
