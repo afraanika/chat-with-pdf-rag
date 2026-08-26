@@ -1,6 +1,7 @@
-pdfplumber
-sentence-transformers
-faiss-cpu
-numpy
-ollama
-python-dotenv
+pdfplumber==0.11.10
+sentence-transformers==6.0.0
+faiss-cpu==1.15.0
+numpy==2.5.2
+ollama==0.6.2
+python-dotenv==1.2.3
+httpx==0.28.1

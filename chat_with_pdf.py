@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import faiss
+import httpx
 import numpy as np
 import ollama
 import pdfplumber
@@ -86,6 +87,12 @@ def remove_repeated_lines(pages: list[str]) -> list[str]:
 
     def normalize(line: str) -> str:
         return re.sub(r"\d+", "#", line.strip())
+
+    # A line that appears on every page of a short document (1-2 pages)
+    # is as likely to be real content as a running header. Below 3 pages,
+    # keep every line instead of guessing.
+    if len(pages) < 3:
+        return ["\n".join(line for line in lines if line.strip()) for lines in page_lines]
 
     normalized_per_page = [
         {normalize(line) for line in lines if line.strip()} for lines in page_lines
@@ -222,7 +229,14 @@ def retrieve(
     """
     query_vector = embed_texts(model, [query])
     similarities, indices = index.search(query_vector, top_k)
-    return [(chunks[i], float(sim)) for sim, i in zip(similarities[0], indices[0])]
+    # FAISS returns -1 for a slot with no match, which happens when top_k
+    # is larger than the number of stored vectors. A raw -1 index would
+    # silently wrap around to the last chunk in the list below, so drop it.
+    return [
+        (chunks[i], float(sim))
+        for sim, i in zip(similarities[0], indices[0])
+        if i != -1
+    ]
 
 
 def build_prompt(query: str, results: list[tuple[Chunk, float]]) -> str:
@@ -261,7 +275,13 @@ def generate_answer(prompt: str, model: str = OLLAMA_MODEL, host: str = OLLAMA_H
     rearranged existing text from the document.
     """
     client = ollama.Client(host=host)
-    response = client.generate(model=model, prompt=prompt)
+    try:
+        response = client.generate(model=model, prompt=prompt)
+    except httpx.ConnectError as exc:
+        raise ConnectionError(
+            f"Could not reach Ollama at {host}. Start it and make sure "
+            f"'{model}' is pulled (run: ollama pull {model})."
+        ) from exc
     return response["response"]
 
 
@@ -325,6 +345,12 @@ def evaluate_retrieval(
 
 
 if __name__ == "__main__":
+    if not PDF_PATH.exists():
+        raise FileNotFoundError(
+            f"No PDF at {PDF_PATH}. Put a PDF there, or change PDF_PATH "
+            f"in chat_with_pdf.py."
+        )
+
     raw_pages = extract_page_content(PDF_PATH)
     cleaned_pages = remove_repeated_lines(raw_pages)
     total_chars = sum(len(p) for p in cleaned_pages)

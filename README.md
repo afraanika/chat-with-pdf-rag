@@ -28,4 +28,4 @@ for grounding).
 Python · sentence-transformers (all-MiniLM-L6-v2) for embeddings · Ollama (local LLM) for generation · numpy / FAISS for vector search
 
 ## Status
-🚧 In progress — built incrementally, stage by stage.
+All seven stages are built.
