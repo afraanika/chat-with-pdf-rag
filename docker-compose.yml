@@ -1,0 +1,27 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+      OLLAMA_MODEL: llama3
+      DATABASE_URL: sqlite:////app/storage/app.db
+      STORAGE_ROOT: /app/storage
+      SESSION_SECRET: ${SESSION_SECRET:-dev-insecure-secret-change-me}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+    volumes:
+      - app_data:/app/storage
+    depends_on:
+      - ollama
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama_data:/root/.ollama
+    restart: unless-stopped
+
+volumes:
+  app_data:
+  ollama_data:

@@ -9,13 +9,14 @@ SQLite, and keeps loading a document as simple as reading two files.
 """
 
 import json
+import os
 from pathlib import Path
 
 import faiss
 
 from chat_with_pdf import Chunk
 
-STORAGE_ROOT = Path("storage")
+STORAGE_ROOT = Path(os.environ.get("STORAGE_ROOT", "storage"))
 
 
 def document_dir(user_id: str, doc_id: str) -> Path:

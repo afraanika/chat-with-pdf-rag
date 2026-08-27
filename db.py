@@ -6,13 +6,14 @@ they live on disk (see storage.py). This DB only tracks who owns what and
 enough metadata to render a document list.
 """
 
+import os
 import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import DateTime, ForeignKey, String, create_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, sessionmaker
 
-DB_PATH = "sqlite:///./app.db"
+DB_PATH = os.environ.get("DATABASE_URL", "sqlite:///./app.db")
 
 engine = create_engine(DB_PATH, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
