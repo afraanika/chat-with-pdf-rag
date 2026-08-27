@@ -4,7 +4,7 @@ services:
     ports:
       - "8000:8000"
     environment:
-      OLLAMA_HOST: http://ollama:11434
+      OLLAMA_HOST: http://host.docker.internal:11434
       OLLAMA_MODEL: llama3
       DATABASE_URL: sqlite:////app/storage/app.db
       STORAGE_ROOT: /app/storage
@@ -12,16 +12,9 @@ services:
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
     volumes:
       - app_data:/app/storage
-    depends_on:
-      - ollama
-    restart: unless-stopped
-
-  ollama:
-    image: ollama/ollama:latest
-    volumes:
-      - ollama_data:/root/.ollama
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
 
 volumes:
   app_data:
-  ollama_data:
