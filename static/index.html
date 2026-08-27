@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Chat with a PDF</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>Chat with a PDF</h1>
+      <p class="subtitle">Upload a PDF, then ask questions about it. Answers are grounded in the document and cite their source chunks.</p>
+    </header>
+
+    <section id="upload-section" class="card">
+      <label for="file-input" id="drop-zone" class="drop-zone">
+        <span id="drop-zone-text">Click to choose a PDF, or drag one here</span>
+        <input id="file-input" type="file" accept="application/pdf" hidden />
+      </label>
+      <div id="upload-status" class="status"></div>
+    </section>
+
+    <section id="chat-section" class="card" hidden>
+      <div id="doc-info" class="doc-info"></div>
+      <div id="messages" class="messages"></div>
+      <form id="chat-form" class="chat-form">
+        <input id="question-input" type="text" placeholder="Ask a question about the document..." autocomplete="off" />
+        <button type="submit" id="send-btn">Ask</button>
+      </form>
+    </section>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

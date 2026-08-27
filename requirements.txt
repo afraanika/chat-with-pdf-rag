@@ -5,4 +5,10 @@ numpy==2.5.2
 ollama==0.6.2
 python-dotenv==1.2.3
 httpx==0.28.1
+fastapi==0.141.1
+uvicorn[standard]==0.52.4
+python-multipart==0.0.32
 sqlalchemy==2.0.52
+bcrypt==5.0.0
+itsdangerous==2.2.0
+email-validator==2.3.0

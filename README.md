@@ -28,4 +28,12 @@ for grounding).
 Python · sentence-transformers (all-MiniLM-L6-v2) for embeddings · Ollama (local LLM) for generation · numpy / FAISS for vector search
 
 ## Status
-All seven stages are built.
+All seven stages are built, plus a web UI on top of them.
+
+## Running the web app
+1. Make sure [Ollama](https://ollama.com) is running locally and the model in `.env`/`OLLAMA_MODEL` is pulled (`ollama pull llama3`).
+2. Install dependencies: `pip install -r requirements.txt`
+3. Start the server: `uvicorn app:app --reload`
+4. Open http://localhost:8000, upload a PDF, and start asking questions.
+
+The app holds one document in memory at a time — uploading a new PDF replaces the previous one. It's built for a single person chatting with one document, not concurrent multi-user sessions.
