@@ -13,21 +13,54 @@
       <p class="subtitle">Upload a PDF, then ask questions about it. Answers are grounded in the document and cite their source chunks.</p>
     </header>
 
-    <section id="upload-section" class="card">
-      <label for="file-input" id="drop-zone" class="drop-zone">
-        <span id="drop-zone-text">Click to choose a PDF, or drag one here</span>
-        <input id="file-input" type="file" accept="application/pdf" hidden />
-      </label>
-      <div id="upload-status" class="status"></div>
+    <section id="auth-section" class="card">
+      <div class="tabs">
+        <button type="button" class="tab active" data-tab="login">Log in</button>
+        <button type="button" class="tab" data-tab="signup">Sign up</button>
+      </div>
+
+      <form id="login-form" class="auth-form">
+        <input type="email" id="login-email" placeholder="Email" autocomplete="email" required />
+        <input type="password" id="login-password" placeholder="Password" autocomplete="current-password" required />
+        <button type="submit">Log in</button>
+      </form>
+
+      <form id="signup-form" class="auth-form" hidden>
+        <input type="email" id="signup-email" placeholder="Email" autocomplete="email" required />
+        <input type="password" id="signup-password" placeholder="Password (min 8 characters)" autocomplete="new-password" required />
+        <button type="submit">Sign up</button>
+      </form>
+
+      <div id="auth-status" class="status"></div>
     </section>
 
-    <section id="chat-section" class="card" hidden>
-      <div id="doc-info" class="doc-info"></div>
-      <div id="messages" class="messages"></div>
-      <form id="chat-form" class="chat-form">
-        <input id="question-input" type="text" placeholder="Ask a question about the document..." autocomplete="off" />
-        <button type="submit" id="send-btn">Ask</button>
-      </form>
+    <section id="main-section" hidden>
+      <div class="topbar">
+        <span id="user-email"></span>
+        <button id="logout-btn" class="secondary">Log out</button>
+      </div>
+
+      <section class="card">
+        <label for="file-input" id="drop-zone" class="drop-zone">
+          <span id="drop-zone-text">Click to choose a PDF, or drag one here</span>
+          <input id="file-input" type="file" accept="application/pdf" hidden />
+        </label>
+        <div id="upload-status" class="status"></div>
+      </section>
+
+      <section class="card">
+        <h2>Your documents</h2>
+        <ul id="doc-list" class="doc-list"></ul>
+      </section>
+
+      <section id="chat-section" class="card" hidden>
+        <div id="doc-info" class="doc-info"></div>
+        <div id="messages" class="messages"></div>
+        <form id="chat-form" class="chat-form">
+          <input id="question-input" type="text" placeholder="Ask a question about the document..." autocomplete="off" />
+          <button type="submit" id="send-btn">Ask</button>
+        </form>
+      </section>
     </section>
   </div>
 
